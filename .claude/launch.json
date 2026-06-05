@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "djtest",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-l", "4010", "."],
+      "port": 4010
+    }
+  ]
+}

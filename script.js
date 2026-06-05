@@ -1,9 +1,10 @@
 /* ═══════════════════════════════════════════════════════
    DELIVERING JUSTICE — Unit Test · script.js
-   Test mode: no feedback during quiz · single attempt per section
-   Comprehension includes written response component (W1–W3)
+   Sequential flow: Vocab → Comp MC → Written → Cloze
+   No section choice — each unlocks only after the previous is submitted.
+   No feedback during quiz · single attempt per section
    Game keys: djt_vocab · djt_comp · djt_cloze
-   Written key: djt_comp_written
+   Written: action:'written' → djt_comp_written
    PIN: 9377
 ═══════════════════════════════════════════════════════ */
 
@@ -14,6 +15,9 @@ const STORAGE_KEY   = 'djt_session_v1';
 const SCORES_KEY    = 'djt_scores_v1';
 const WRITTEN_KEY   = 'djt_written_v1';
 const SESSION_ID    = 'DJT-' + Math.random().toString(36).slice(2, 9).toUpperCase();
+
+// Fixed order — students cannot skip or reorder sections
+const SECTION_SEQUENCE = ['vocab', 'comp', 'written', 'cloze'];
 
 /* ── SHEET URL ───────────────────────────────────────── */
 const SHEET_URL = 'https://script.google.com/macros/s/AKfycbzv8CWv1yyi8NeH04now9UxVL4IZm5yMqqsEGMcgGdrcAOWVB-aSp5siTvSSJXIUpzFMA/exec';
@@ -138,7 +142,12 @@ const GUEST_SLOTS = {
   '937710': 'Guest 10'
 };
 
-const SECTION_LABELS = { vocab: 'Vocabulary', comp: 'Comprehension', cloze: 'Cloze' };
+const SECTION_LABELS = {
+  vocab:   'Vocabulary',
+  comp:    'Comprehension',
+  written: 'Written Response',
+  cloze:   'Cloze'
+};
 
 /* ── BUILD DROPDOWN ─────────────────────────────────── */
 (function buildRoster() {
@@ -158,7 +167,79 @@ const SECTION_LABELS = { vocab: 'Vocabulary', comp: 'Comprehension', cloze: 'Clo
   });
 })();
 
-/* ── HELPERS ────────────────────────────────────────── */
+/* ── SEQUENCE HELPERS ────────────────────────────────── */
+function getCompletedSections(name) {
+  const scores = JSON.parse(localStorage.getItem(SCORES_KEY) || '[]');
+  const completed = new Set(scores.filter(s => s.name === name && s.done).map(s => s.section));
+  if (getWrittenSubmitted(name)) completed.add('written');
+  return completed;
+}
+
+function getNextSection(name) {
+  const completed = getCompletedSections(name);
+  return SECTION_SEQUENCE.find(s => !completed.has(s)) || null;
+}
+
+function getWrittenSubmitted(name) {
+  const written = JSON.parse(localStorage.getItem(WRITTEN_KEY) || '[]');
+  return written.some(w => w.name === name);
+}
+
+const STEP_META = [
+  { key: 'vocab',   label: '📚 Vocabulary',          sub: '30 questions' },
+  { key: 'comp',    label: '📖 Comprehension',        sub: '24 questions — scored out of 25' },
+  { key: 'written', label: '✍️ Written Response',     sub: '3 open-ended prompts (not scored)' },
+  { key: 'cloze',   label: '✏️ Cloze (Fill-in)',      sub: '30 questions' }
+];
+
+function renderTestSequence(name) {
+  const completed = getCompletedSections(name);
+  const next      = getNextSection(name);
+  const allDone   = !next;
+
+  const container = document.getElementById('test-sequence');
+  if (!container) return;
+
+  container.innerHTML = STEP_META.map((step, i) => {
+    const done    = completed.has(step.key);
+    const current = step.key === next;
+    const bg      = done ? '#d4edda' : current ? '#eaf2ff' : '#f5f5f5';
+    const border  = done ? '#28a745' : current  ? '#a9c4f5' : '#e0e0e0';
+    const color   = done ? '#155724' : current  ? 'var(--primary)' : '#aaa';
+    const icon    = done ? '✅' : current ? '▶' : (i + 1);
+    const subText = done ? 'Complete' : step.sub;
+    const upNext  = current
+      ? '<span style="font-size:0.72rem;font-weight:bold;background:var(--primary);color:white;border-radius:6px;padding:3px 10px;white-space:nowrap;">UP NEXT</span>'
+      : '';
+    return `<div style="display:flex;align-items:center;gap:14px;background:${bg};border:2px solid ${border};border-radius:12px;padding:11px 15px;margin-bottom:8px;">
+      <div style="font-size:1.3rem;min-width:28px;text-align:center;color:${color};">${icon}</div>
+      <div style="flex:1;">
+        <div style="font-weight:bold;color:${color};font-size:var(--fs);">${step.label}</div>
+        <div style="font-size:0.77rem;color:${done?'#388e3c':current?'#555':'#bbb'};margin-top:2px;">${subText}</div>
+      </div>
+      ${upNext}
+    </div>`;
+  }).join('');
+
+  const btn = document.getElementById('btn-start-next');
+  if (!btn) return;
+  if (allDone) {
+    btn.textContent = '🎉 All sections complete!';
+    btn.disabled    = true;
+    btn.style.background = '#7f8c8d';
+    btn.style.boxShadow  = '0 5px 0 #566573';
+    btn.style.cursor     = 'default';
+  } else {
+    const meta = STEP_META.find(s => s.key === next);
+    btn.textContent     = `▶ Start — ${meta.label}`;
+    btn.disabled        = false;
+    btn.style.background = '';
+    btn.style.boxShadow  = '';
+    btn.style.cursor     = 'pointer';
+  }
+}
+
+/* ── GENERAL HELPERS ─────────────────────────────────── */
 function shuffle(arr) {
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -172,7 +253,6 @@ function getFirstName(name) {
   return parts.length > 1 ? parts[1].trim().split(' ')[0] : name.split(' ')[0];
 }
 
-// Multi-answer questions are worth their answer count (Q19 = 2 pts)
 function computeMaxScore(bank) {
   return bank.reduce((sum, q) => sum + (Array.isArray(q.answer) ? q.answer.length : 1), 0);
 }
@@ -184,9 +264,8 @@ function wrapWords(html) {
   function walk(node) {
     if (node.nodeType === 3) {
       const text = node.textContent.replace(/—/g, ' — ').replace(/  +/g, ' ');
-      const words = text.split(/(\s+)/);
-      const frag  = document.createDocumentFragment();
-      words.forEach(part => {
+      const frag = document.createDocumentFragment();
+      text.split(/(\s+)/).forEach(part => {
         if (/\S/.test(part)) {
           const sp = document.createElement('span');
           sp.className = 'wrd'; sp.dataset.wi = idx++; sp.textContent = part;
@@ -204,9 +283,7 @@ function wrapWords(html) {
   return tmp.innerHTML;
 }
 
-function choiceHtml(text) {
-  return text.replace(/—/g, ' — ');
-}
+function choiceHtml(text) { return text.replace(/—/g, ' — '); }
 
 function letterGradeStudent(pct) {
   if (pct >= 97) return 'A+';
@@ -224,42 +301,11 @@ function letterGradeStudent(pct) {
   return 'F';
 }
 
-function getCompletedSections(name) {
-  const scores = JSON.parse(localStorage.getItem(SCORES_KEY) || '[]');
-  return new Set(scores.filter(s => s.name === name && s.done).map(s => s.section));
-}
-
-function getWrittenSubmitted(name) {
-  const written = JSON.parse(localStorage.getItem(WRITTEN_KEY) || '[]');
-  return written.some(w => w.name === name);
-}
-
-function applyLocks(name) {
-  const completed = getCompletedSections(name);
-  const qCounts = {
-    vocab: '30 questions',
-    comp:  '24 questions (scored out of 25)',
-    cloze: '30 questions'
-  };
-  ['vocab', 'comp', 'cloze'].forEach(sec => {
-    const btn = document.getElementById(`btn-${sec}`);
-    const sub = document.getElementById(`sub-${sec}`);
-    if (!btn) return;
-    if (completed.has(sec)) {
-      btn.classList.add('locked');
-      if (sub) sub.textContent = '✅ Complete — locked';
-    } else {
-      btn.classList.remove('locked');
-      if (sub) sub.textContent = qCounts[sec];
-    }
-  });
-}
-
 /* ── SPEECH ─────────────────────────────────────────── */
-let activeSpeakBtn  = null;
-let tabSwitchCount  = 0;
-let reviewMode      = false;
-let reviewAutoRun   = false;
+let activeSpeakBtn   = null;
+let tabSwitchCount   = 0;
+let reviewMode       = false;
+let reviewAutoRun    = false;
 let pinModalCallback = null;
 
 function stopActiveSpeech() {
@@ -268,7 +314,6 @@ function stopActiveSpeech() {
   if (activeSpeakBtn) { activeSpeakBtn.textContent = '🔊'; activeSpeakBtn = null; }
 }
 
-/* ── DIRECTIONS SPEAK ────────────────────────────────── */
 function speakDir(btn) {
   if (activeSpeakBtn === btn) { stopActiveSpeech(); return; }
   stopActiveSpeech();
@@ -278,10 +323,8 @@ function speakDir(btn) {
   const spans = Array.from(p.querySelectorAll('.wrd'));
   if (!spans.length) return;
   activeSpeakBtn = btn; btn.textContent = '⏹';
-  const speechText = spans.map(s => s.textContent).join(' ');
-  let hlIdx = 0;
-  const u = new SpeechSynthesisUtterance(speechText);
-  u.lang = 'en-US'; u.rate = 0.92;
+  const u = new SpeechSynthesisUtterance(spans.map(s => s.textContent).join(' '));
+  u.lang = 'en-US'; u.rate = 0.92; let hlIdx = 0;
   u.onboundary = e => {
     if (e.name !== 'word') return;
     document.querySelectorAll('.dir-text .wrd.hl').forEach(el => el.classList.remove('hl'));
@@ -300,7 +343,6 @@ function speakDir(btn) {
 ══════════════════════════════════════════════════════ */
 const app = {
 
-  /* ── state ── */
   studentName:      '',
   currentSection:   '',
   currentBank:      [],
@@ -316,7 +358,6 @@ const app = {
   readInterval:     null,
   _lastFinishedScore: null,
 
-  /* ── screen manager ── */
   show(id) {
     ['start-screen','readaloud-screen','directions-screen','quiz-screen',
      'confirm-submit-screen','end-screen','written-screen','scoreboard-screen']
@@ -325,19 +366,18 @@ const app = {
     window.speechSynthesis.cancel();
   },
 
-  /* ── INIT ── */
   init() {
     this.show('start-screen');
     document.getElementById('welcome-panel').classList.remove('hidden');
     document.getElementById('student-login-panel').classList.add('hidden');
   },
 
-  /* ── READ ALOUD INTRO ── */
+  /* ── WELCOME / DIRECTIONS ── */
   showReadAloudIntro() {
     document.getElementById('welcome-panel').classList.add('hidden');
     this.show('readaloud-screen');
-    const btn   = document.getElementById('readaloud-btn');
-    const fill  = document.getElementById('readaloud-fill');
+    const btn = document.getElementById('readaloud-btn');
+    const fill = document.getElementById('readaloud-fill');
     const count = document.getElementById('readaloud-count');
     btn.disabled = true; btn.style.opacity = '0.45'; btn.style.cursor = 'not-allowed';
     count.textContent = 6; fill.style.transition = 'none'; fill.style.width = '100%';
@@ -354,7 +394,6 @@ const app = {
     }, 1000);
   },
 
-  /* ── DIRECTIONS ── */
   showDirections() {
     this.show('directions-screen');
     this.startInstructionsTimer();
@@ -374,7 +413,7 @@ const app = {
     document.getElementById('student-login-panel').classList.remove('hidden');
   },
 
-  /* ── NAME SELECT ── */
+  /* ── NAME SELECT / LOGIN ── */
   onNameSelect() {
     const val = document.getElementById('name-select').value;
     const pinSec = document.getElementById('pin-section');
@@ -392,7 +431,6 @@ const app = {
     setTimeout(() => document.getElementById('student-pin').focus(), 80);
   },
 
-  /* ── LOGIN ── */
   attemptLogin() {
     const selVal = document.getElementById('name-select').value;
     const pin    = document.getElementById('student-pin').value.trim();
@@ -423,25 +461,52 @@ const app = {
       const lc = document.getElementById('login-step-card');
       if (lc) lc.classList.add('hidden');
       document.getElementById('section-select').classList.remove('hidden');
-      applyLocks(displayName);
+      renderTestSequence(displayName);
       this.checkResume();
     }
   },
 
-  /* ── ATTEMPT START ── */
-  attemptStart(section) {
+  /* ── SEQUENTIAL SECTION START ── */
+  startNextSection() {
     if (!this.studentName) return;
-    const completed = getCompletedSections(this.studentName);
-    const name1 = getFirstName(this.studentName);
-
-    if (completed.has(section) && !reviewMode) {
-      this.showPinModal(
-        `🔓 Unlock ${SECTION_LABELS[section]}`,
-        `${name1} has already completed ${SECTION_LABELS[section]}. Enter Teacher PIN to allow a retake.`,
-        () => { this.startSession(section); }
-      );
+    const next = getNextSection(this.studentName);
+    if (!next) return;
+    if (next === 'written') {
+      this.showWrittenScreen();
     } else {
-      this.startSession(section);
+      this.startSession(next);
+    }
+  },
+
+  // Called when teacher wants to unlock a retake of a specific section
+  unlockSection(section) {
+    this.showPinModal(
+      `🔓 Unlock ${SECTION_LABELS[section]}`,
+      `Enter Teacher PIN to allow ${getFirstName(this.studentName)} to retake ${SECTION_LABELS[section]}.`,
+      () => {
+        // Remove that section's score from local storage so it re-unlocks
+        const scores = JSON.parse(localStorage.getItem(SCORES_KEY) || '[]');
+        const updated = scores.filter(s => !(s.name === this.studentName && s.section === section));
+        localStorage.setItem(SCORES_KEY, JSON.stringify(updated));
+        if (section === 'written') {
+          const written = JSON.parse(localStorage.getItem(WRITTEN_KEY) || '[]');
+          localStorage.setItem(WRITTEN_KEY, JSON.stringify(written.filter(w => w.name !== this.studentName)));
+        }
+        renderTestSequence(this.studentName);
+      }
+    );
+  },
+
+  /* ── CONTINUE AFTER A SECTION ── */
+  continueToNextSection() {
+    stopConfetti();
+    const next = getNextSection(this.studentName);
+    if (!next) { this.restart(); return; }
+    this.timerSeconds = 0;
+    if (next === 'written') {
+      this.showWrittenScreen();
+    } else {
+      this.startSession(next);
     }
   },
 
@@ -459,7 +524,7 @@ const app = {
     const section = prompt('Choose a section to preview:\n1 — Vocabulary\n2 — Comprehension\n3 — Cloze\n\nEnter 1, 2, or 3:');
     const map = { '1': 'vocab', '2': 'comp', '3': 'cloze' };
     if (!map[section]) { alert('Invalid choice.'); reviewMode = false; return; }
-    const mode = prompt('Mode:\n1 — Manual (tap Next each question)\n2 — Auto-run (fully automatic)\n\nEnter 1 or 2:');
+    const mode = prompt('Mode:\n1 — Manual (tap Next)\n2 — Auto-run\n\nEnter 1 or 2:');
     if (mode !== '1' && mode !== '2') { alert('Invalid.'); reviewMode = false; return; }
     reviewAutoRun = (mode === '2');
     this.startSession(map[section]);
@@ -499,12 +564,13 @@ const app = {
     this.currentSection = section;
     this.score          = 0;
     this.currentIndex   = 0;
+    this.timerSeconds   = 0;
     this._lastFinishedScore = null;
 
     let rawBank;
-    if (section === 'vocab')      rawBank = [...window.VOCAB_BANK];
-    else if (section === 'comp')  rawBank = [...window.COMP_BANK];
-    else                          rawBank = [...window.CLOZE_BANK];
+    if (section === 'vocab')     rawBank = [...window.VOCAB_BANK];
+    else if (section === 'comp') rawBank = [...window.COMP_BANK];
+    else                         rawBank = [...window.CLOZE_BANK];
 
     const shuffleQ = q => {
       const isMulti = Array.isArray(q.answer);
@@ -517,7 +583,6 @@ const app = {
     };
 
     if (section === 'comp') {
-      // Story details (P01–P12) shuffle freely; inference pairs stay together
       const details = rawBank.filter(q => /^P(0[1-9]|1[0-2])$/.test(q.id));
       const pairIds = [
         ['P13','P14'], ['P15','P16'], ['P17','P18'],
@@ -545,7 +610,7 @@ const app = {
     this.renderQuestion();
   },
 
-  /* ── RESUME ── */
+  /* ── RESUME / SAVE ── */
   checkResume() {
     const saved = localStorage.getItem(STORAGE_KEY);
     const rc = document.getElementById('resume-container');
@@ -598,11 +663,11 @@ const app = {
   discardProgress() {
     this.showPinModal(
       '🗑️ Discard Progress',
-      'Enter Teacher PIN to clear the in-progress session. The student will start fresh from the section picker.',
+      'Enter Teacher PIN to clear the in-progress session.',
       () => {
         localStorage.removeItem(STORAGE_KEY);
         document.getElementById('resume-container').classList.add('hidden');
-        applyLocks(this.studentName);
+        renderTestSequence(this.studentName);
         this.checkResume();
       }
     );
@@ -631,7 +696,6 @@ const app = {
     if (el) el.textContent = `${m}:${s}`;
   },
 
-  /* ── INSTRUCTIONS LOCK (20s) ── */
   startInstructionsTimer() {
     if (this.instructInterval) { clearInterval(this.instructInterval); this.instructInterval = null; }
     const btn   = document.getElementById('ready-btn');
@@ -707,8 +771,8 @@ const app = {
     document.getElementById('name-badge').textContent    = getFirstName(this.studentName);
     document.getElementById('progress-fill').style.width = `${(this.currentIndex / total) * 100}%`;
 
-    const qtEl     = document.getElementById('question-text');
-    const badge    = isMulti ? '<span class="two-answer-badge">Choose TWO</span>' : '';
+    const qtEl  = document.getElementById('question-text');
+    const badge = isMulti ? '<span class="two-answer-badge">Choose TWO</span>' : '';
     const pairNote = q.pairLabel
       ? `<div style="font-size:0.78rem;color:#7f8c8d;margin-top:6px;font-style:italic;">📎 ${q.pairLabel}</div>`
       : '';
@@ -783,10 +847,7 @@ const app = {
     }
   },
 
-  /* ── CONFIRM ANSWER ──
-     Test mode: no feedback shown. Score updated silently.
-     In Teacher Review Mode: correct/incorrect coloring shown for reference.
-  ── */
+  /* ── CONFIRM ANSWER (no feedback in test mode) ── */
   confirmAnswer() {
     if (this.selectedIndices.size === 0) return;
     this.questionLocked = true;
@@ -795,28 +856,23 @@ const app = {
     const isMulti = Array.isArray(q.answer);
 
     if (isMulti) {
-      // Partial credit: 1 point per correct selection (max 2 for Q19)
-      const selected = [...this.selectedIndices];
-      this.score += selected.filter(i => q.answer.includes(i)).length;
+      this.score += [...this.selectedIndices].filter(i => q.answer.includes(i)).length;
     } else {
       if ([...this.selectedIndices][0] === q.answer) this.score++;
     }
 
-    // Disable all choices — no correct/incorrect styling in test mode
     document.querySelectorAll('.answer-btn').forEach((btn, i) => {
       btn.disabled = true;
       if (reviewMode) {
         const isCorrect = isMulti ? q.answer.includes(i) : i === q.answer;
-        if (isCorrect)                      btn.classList.add('correct');
+        if (isCorrect)                        btn.classList.add('correct');
         else if (this.selectedIndices.has(i)) btn.classList.add('incorrect');
       }
-      // Test mode: selected choice stays yellow (.selected), others just grey out
     });
 
     document.getElementById('confirm-btn').classList.add('hidden');
     this.saveProgress();
 
-    // Next button appears immediately (no soak timer in test mode)
     if (reviewMode && reviewAutoRun) {
       setTimeout(() => this.nextQuestion(), 800);
     } else {
@@ -824,7 +880,6 @@ const app = {
     }
   },
 
-  /* ── NEXT QUESTION ── */
   nextQuestion() {
     stopActiveSpeech();
     if (this.currentIndex + 1 >= this.currentBank.length) {
@@ -835,7 +890,7 @@ const app = {
     }
   },
 
-  /* ── CONFIRM SUBMIT SCREEN ── */
+  /* ── CONFIRM SUBMIT ── */
   showConfirmSubmit() {
     stopActiveSpeech();
     if (this.readInterval) { clearInterval(this.readInterval); this.readInterval = null; }
@@ -846,12 +901,10 @@ const app = {
   },
 
   goBackFromConfirm() {
-    // Return to the last question in locked state so student can review their selection
     this.show('quiz-screen');
     this._renderLockedQuestion();
   },
 
-  // Re-renders the current (last) question with choices locked — no timers started
   _renderLockedQuestion() {
     const q     = this.currentBank[this.currentIndex];
     const total = this.currentBank.length;
@@ -877,7 +930,6 @@ const app = {
     this.questionLocked = true;
     const wrap = document.getElementById('answers');
     wrap.innerHTML = '';
-
     q.choices.forEach((text, i) => {
       const row = document.createElement('div');
       row.className = 'answer-row';
@@ -905,16 +957,11 @@ const app = {
     if (!reviewMode) {
       const scores = JSON.parse(localStorage.getItem(SCORES_KEY) || '[]');
       scores.push({
-        name:    this.studentName,
-        section: this.currentSection,
-        attempt: 1,
-        score:   this.score,
-        total,
-        pct,
-        elapsed: this.timerSeconds,
-        date:    date.toLocaleDateString(),
-        time:    date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        done:    true
+        name: this.studentName, section: this.currentSection, attempt: 1,
+        score: this.score, total, pct, elapsed: this.timerSeconds,
+        date: date.toLocaleDateString(),
+        time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        done: true
       });
       localStorage.setItem(SCORES_KEY, JSON.stringify(scores));
     }
@@ -931,9 +978,7 @@ const app = {
     else                msg = "Don't give up — let's review! 📚";
 
     this.show('end-screen');
-
     document.getElementById('review-next-btn').classList.toggle('hidden', !reviewMode);
-
     document.getElementById('final-score-sub').textContent =
       `${SECTION_LABELS[this.currentSection]} · ${this.studentName}`;
     document.getElementById('final-msg').textContent = msg;
@@ -943,16 +988,27 @@ const app = {
       `${this.score}/${total}<br><small style="font-size:0.5em;color:${pct>=70?'var(--correct)':'var(--danger)'};">${pct}% · ${letter}</small>`;
     setTimeout(() => pctEl.classList.add('revealed'), 50);
 
-    // Written response button (comp section only, when not already submitted)
-    const wrBtnWrap = document.getElementById('written-response-btn-wrap');
-    const wrNotice  = document.getElementById('written-submitted-notice');
-    if (!reviewMode && this.currentSection === 'comp') {
-      const alreadyDone = getWrittenSubmitted(this.studentName);
-      wrBtnWrap.classList.toggle('hidden',  alreadyDone);
-      wrNotice.classList.toggle('hidden', !alreadyDone);
+    // Written button no longer needed on end screen (written is a forced step in the sequence)
+    document.getElementById('written-response-btn-wrap').classList.add('hidden');
+    document.getElementById('written-submitted-notice').classList.add('hidden');
+
+    // Continue button — show for all non-final sections in test mode
+    const continueBtnWrap = document.getElementById('continue-btn-wrap');
+    const continueBtn     = document.getElementById('continue-btn');
+    if (!reviewMode) {
+      const next = getNextSection(this.studentName);
+      if (next) {
+        const meta = STEP_META.find(s => s.key === next);
+        continueBtn.textContent = `Continue to ${meta.label} →`;
+        continueBtnWrap.classList.remove('hidden');
+      } else {
+        // Cloze just finished — all MC sections done
+        continueBtn.textContent = '🎉 View My Final Scores';
+        continueBtn.onclick = () => this.showScores(true);
+        continueBtnWrap.classList.remove('hidden');
+      }
     } else {
-      wrBtnWrap.classList.add('hidden');
-      wrNotice.classList.add('hidden');
+      continueBtnWrap.classList.add('hidden');
     }
 
     if (pct >= 90) startConfetti(pct);
@@ -965,11 +1021,13 @@ const app = {
     if (this._lastFinishedScore) {
       const { score, total, pct } = this._lastFinishedScore;
       document.getElementById('mc-score-reminder').innerHTML =
-        `📊 Your MC score: <strong>${score}/${total} (${pct}%)</strong> — already saved. Written responses are submitted separately and are not scored.`;
+        `📊 Your Comprehension MC score: <strong>${score}/${total} (${pct}%)</strong> — already saved. Written responses are submitted separately and are not scored.`;
     }
 
     const container = document.getElementById('written-prompts-container');
     container.innerHTML = '';
+    container.classList.remove('hidden');
+
     WRITTEN_PROMPTS.forEach(p => {
       const card = document.createElement('div');
       card.className = 'written-prompt-card';
@@ -985,9 +1043,12 @@ const app = {
       container.appendChild(card);
     });
 
-    document.getElementById('written-submit-error').textContent = '';
     const btn = document.getElementById('submit-written-btn');
-    btn.disabled = false; btn.textContent = '✅ Submit Written Responses';
+    btn.classList.remove('hidden');
+    btn.disabled = false;
+    btn.textContent = '✅ Submit Written Responses';
+    document.getElementById('written-submit-error').textContent = '';
+    document.getElementById('written-success-panel').classList.add('hidden');
   },
 
   _updateWordCount(id, textarea) {
@@ -1019,23 +1080,11 @@ const app = {
     written.push({ name: this.studentName, timestamp: new Date().toISOString() });
     localStorage.setItem(WRITTEN_KEY, JSON.stringify(written));
 
-    // Return to end screen with success notice
-    this.show('end-screen');
-    if (this._lastFinishedScore) {
-      const { score, total, pct } = this._lastFinishedScore;
-      document.getElementById('final-score-sub').textContent =
-        `${SECTION_LABELS[this.currentSection]} · ${this.studentName}`;
-      document.getElementById('final-msg').textContent =
-        pct >= 90 ? "Outstanding Work! 🌟" : pct >= 80 ? "Great Job! 👏" :
-        pct >= 70 ? "Good Effort! 💪" : pct >= 60 ? "Keep Working Hard! 📚" : "Don't give up! 📚";
-      const pctEl = document.getElementById('final-percent');
-      pctEl.innerHTML =
-        `${score}/${total}<br><small style="font-size:0.5em;color:${pct>=70?'var(--correct)':'var(--danger)'};">${pct}% · ${letterGradeStudent(pct)}</small>`;
-      pctEl.classList.add('revealed');
-    }
-    document.getElementById('written-response-btn-wrap').classList.add('hidden');
-    document.getElementById('written-submitted-notice').classList.remove('hidden');
-    document.getElementById('review-next-btn').classList.add('hidden');
+    // Hide prompts and submit button; show success panel with Continue button
+    document.getElementById('written-prompts-container').classList.add('hidden');
+    btn.classList.add('hidden');
+    document.getElementById('mc-score-reminder').classList.add('hidden');
+    document.getElementById('written-success-panel').classList.remove('hidden');
   },
 
   /* ── SPEAK QUESTION ── */
@@ -1077,33 +1126,32 @@ const app = {
     if (!all.length) { listEl.innerHTML = ''; noEl.style.display = 'block'; return; }
     noEl.style.display = 'none';
 
-    const sections    = ['vocab','comp','cloze'];
     const writtenDone = getWrittenSubmitted(this.studentName);
 
-    const summaryCards = sections.map(sec => {
-      const best  = all.filter(s => s.section === sec && s.done)
+    const summaryCards = STEP_META.map(step => {
+      if (step.key === 'written') {
+        return `<div class="sb-summary-card">
+          <div class="sb-summary-label">Written</div>
+          <div class="sb-summary-grade" style="color:${writtenDone?'#27ae60':'#aaa'};font-size:1.6rem;">${writtenDone?'✅':'—'}</div>
+          <div class="sb-summary-score" style="color:#555;">${writtenDone?'Submitted':'Not yet'}</div>
+        </div>`;
+      }
+      const best = all.filter(s => s.section === step.key && s.done)
         .reduce((b, r) => (!b || r.pct > b.pct) ? r : b, null);
-      const label = SECTION_LABELS[sec];
-      const wTag  = sec === 'comp'
-        ? writtenDone
-          ? '<div style="margin-top:6px;background:#d4edda;border-radius:6px;padding:2px 7px;font-size:0.68rem;color:#155724;font-weight:bold;">✍️ Written: Submitted</div>'
-          : best
-            ? '<div style="margin-top:6px;background:#fff3cd;border-radius:6px;padding:2px 7px;font-size:0.68rem;color:#856404;font-weight:bold;">✍️ Written: Not yet submitted</div>'
-            : ''
-        : '';
       if (!best) return `<div class="sb-summary-card sb-incomplete">
-        <div class="sb-summary-label">${label}</div>
+        <div class="sb-summary-label">${step.label.replace(/^[^\s]+\s/,'')}</div>
         <div class="sb-summary-grade" style="color:#ccc;">—</div>
-        <div class="sb-summary-score" style="color:#aaa;">Not yet completed</div>${wTag}</div>`;
+        <div class="sb-summary-score" style="color:#aaa;">Not yet</div></div>`;
       const grade = letterGradeStudent(best.pct);
-      const gc    = best.pct>=90?'#27ae60':best.pct>=80?'#2980b9':best.pct>=70?'#f39c12':best.pct>=60?'#e67e22':'#e74c3c';
+      const gc = best.pct>=90?'#27ae60':best.pct>=80?'#2980b9':best.pct>=70?'#f39c12':best.pct>=60?'#e67e22':'#e74c3c';
       return `<div class="sb-summary-card">
-        <div class="sb-summary-label">${label}</div>
+        <div class="sb-summary-label">${step.label.replace(/^[^\s]+\s/,'')}</div>
         <div class="sb-summary-grade" style="color:${gc};">${grade}</div>
-        <div class="sb-summary-score">${best.score}/${best.total} · ${best.pct}%</div>${wTag}</div>`;
+        <div class="sb-summary-score">${best.score}/${best.total} · ${best.pct}%</div>
+      </div>`;
     }).join('');
 
-    const details = sections.map(sec => {
+    const details = ['vocab','comp','cloze'].map(sec => {
       const rows = all.filter(s => s.section === sec && s.done);
       if (!rows.length) return '';
       const tableRows = rows.map(r => {
@@ -1256,20 +1304,16 @@ window.addEventListener('resize', resize); resize();
 
 function startConfetti(pct) {
   particles = [];
-  let count, cols;
-  if (pct === 100) {
-    count = 300; cols = ['#FFD700','#c9a227','#FFFACD','#FFA500','#ffffff','#FFD700'];
-  } else {
-    count = 220; cols = ['#1a3a6b','#c9a227','#2ecc71','#3498db','#9b59b6','#e74c3c','#FFD700'];
-  }
+  const count = pct === 100 ? 300 : 220;
+  const cols  = pct === 100
+    ? ['#FFD700','#c9a227','#FFFACD','#FFA500','#ffffff']
+    : ['#1a3a6b','#c9a227','#2ecc71','#3498db','#9b59b6','#e74c3c','#FFD700'];
   for (let i = 0; i < count; i++) {
     particles.push({
       x: Math.random() * canvas.width,
       y: Math.random() * canvas.height - canvas.height,
       c: cols[~~(Math.random() * cols.length)],
-      s: Math.random() * 5 + 3,
-      d: Math.random() * 5 + 2,
-      r: Math.random() * Math.PI * 2
+      s: Math.random() * 5 + 3, d: Math.random() * 5 + 2, r: Math.random() * Math.PI * 2
     });
   }
   animateConfetti();

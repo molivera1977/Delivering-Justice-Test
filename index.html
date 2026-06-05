@@ -81,15 +81,12 @@
       <!-- STEP 2 — CHOOSE A SECTION -->
       <div id="section-select" class="hidden">
         <div class="step-card">
-          <span class="step-label">Step 2 — Choose a Section</span>
-          <div style="background:#fff3cd;border:2px solid #ffc107;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:0.88rem;color:#856404;line-height:1.6;">
-            ⚠️ <strong>One attempt per section.</strong> Once you submit a section it is locked. Your teacher can unlock a retake if needed.
-          </div>
-          <div class="start-grid">
-            <button class="start-btn" id="btn-vocab"  onclick="app.attemptStart('vocab')">📚 Vocabulary<span class="form-btn-sub" id="sub-vocab">30 questions</span></button>
-            <button class="start-btn" id="btn-comp"   onclick="app.attemptStart('comp')">📖 Comprehension<span class="form-btn-sub" id="sub-comp">24 questions</span></button>
-            <button class="start-btn" id="btn-cloze"  onclick="app.attemptStart('cloze')">✏️ Cloze (Fill-in)<span class="form-btn-sub" id="sub-cloze">30 questions</span></button>
-          </div>
+          <span class="step-label">Step 2 — Your Test</span>
+          <div id="test-sequence" style="margin-bottom:16px;"></div>
+          <button class="start-btn" id="btn-start-next" onclick="app.startNextSection()"
+                  style="width:100%;justify-content:center;font-size:1.05rem;padding:16px 20px;">
+            ▶ Start
+          </button>
         </div>
         <div style="text-align:center;margin-bottom:8px;">
           <button class="score-btn" onclick="app.showScores()">📊 View My Scores</button>
@@ -264,6 +261,10 @@
     <p id="final-score-sub" style="text-align:center;color:#666;margin-bottom:0;"></p>
     <span id="final-percent"></span>
     <p id="final-msg" style="font-size:1.3rem;text-align:center;"></p>
+    <!-- Primary: continue to next section (hidden on last section) -->
+    <div id="continue-btn-wrap" class="hidden" style="margin-top:16px;">
+      <button class="lgs-btn" id="continue-btn" onclick="app.continueToNextSection()" style="width:100%;font-size:1.1rem;padding:18px;">Continue →</button>
+    </div>
     <div class="end-btns">
       <button class="start-btn" style="background:#27ae60;box-shadow:0 5px 0 #1e8449;" onclick="app.restart()">🏠 Home</button>
     </div>
@@ -295,6 +296,14 @@
     <div id="written-prompts-container"></div>
     <button class="lgs-btn" id="submit-written-btn" onclick="app.submitWrittenResponses()" style="width:100%;margin-top:6px;font-size:1.05rem;padding:16px;">✅ Submit Written Responses</button>
     <div id="written-submit-error" style="color:#c0392b;font-weight:bold;min-height:22px;margin-top:8px;text-align:center;font-size:0.9rem;"></div>
+
+    <!-- Success state shown after submission -->
+    <div id="written-success-panel" class="hidden" style="text-align:center;padding:24px 0 10px;">
+      <div style="font-size:3rem;margin-bottom:12px;">✅</div>
+      <h3 style="color:var(--correct);margin:0 0 8px;">Responses Submitted!</h3>
+      <p style="color:#555;font-size:0.93rem;margin:0 0 24px;line-height:1.6;">Your written responses have been saved. Your teacher will read them and give you feedback.</p>
+      <button class="lgs-btn" onclick="app.continueToNextSection()" style="width:100%;max-width:380px;display:block;margin:0 auto;font-size:1.1rem;padding:16px;">Continue to Cloze ✏️ →</button>
+    </div>
   </div>
 
   <!-- ══════════════════════════════════════════

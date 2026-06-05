@@ -521,9 +521,15 @@ const app = {
   },
 
   _showReviewPicker() {
-    const section = prompt('Choose a section to preview:\n1 — Vocabulary\n2 — Comprehension\n3 — Cloze\n\nEnter 1, 2, or 3:');
-    const map = { '1': 'vocab', '2': 'comp', '3': 'cloze' };
+    const section = prompt('Choose a part to preview:\n1 — Vocabulary\n2 — Comprehension\n3 — Written Response\n4 — Cloze\n\nEnter 1, 2, 3, or 4:');
+    const map = { '1': 'vocab', '2': 'comp', '3': 'written', '4': 'cloze' };
     if (!map[section]) { alert('Invalid choice.'); reviewMode = false; return; }
+    if (map[section] === 'written') {
+      this._lastFinishedScore = { score: 23, total: 25, pct: 92 };
+      this.currentSection = 'comp';
+      this.showWrittenScreen();
+      return;
+    }
     const mode = prompt('Mode:\n1 — Manual (tap Next)\n2 — Auto-run\n\nEnter 1 or 2:');
     if (mode !== '1' && mode !== '2') { alert('Invalid.'); reviewMode = false; return; }
     reviewAutoRun = (mode === '2');

@@ -14,7 +14,12 @@ const READ_SECS     = 12;
 const STORAGE_KEY   = 'djt_session_v1';
 const SCORES_KEY    = 'djt_scores_v1';
 const WRITTEN_KEY   = 'djt_written_v1';
-const SESSION_ID    = 'DJT-' + Math.random().toString(36).slice(2, 9).toUpperCase();
+const DJT_SESSION_ID_KEY = 'djt_session_id_v1';
+const SESSION_ID = (() => {
+  let id = localStorage.getItem(DJT_SESSION_ID_KEY);
+  if (!id) { id = 'DJT-' + Math.random().toString(36).slice(2, 9).toUpperCase(); localStorage.setItem(DJT_SESSION_ID_KEY, id); }
+  return id;
+})();
 
 // Fixed order — students cannot skip or reorder sections
 const SECTION_SEQUENCE = ['vocab', 'comp', 'written', 'cloze'];
@@ -567,6 +572,7 @@ const app = {
     }
 
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(DJT_SESSION_ID_KEY);
     this.currentSection = section;
     this.score          = 0;
     this.currentIndex   = 0;
@@ -953,6 +959,7 @@ const app = {
   _finishSession() {
     this.stopTimerEngine();
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(DJT_SESSION_ID_KEY);
 
     const total = this.maxScore;
     const pct   = Math.round((this.score / total) * 100);
@@ -1287,6 +1294,7 @@ document.addEventListener('visibilitychange', () => {
   } else {
     const wb = document.getElementById('tab-warning-banner');
     if (wb) wb.classList.remove('hidden');
+    app.stopTimerEngine();
     app.timerInterval = setInterval(() => {
       app.timerSeconds++;
       app._tickTimer();

@@ -1051,7 +1051,7 @@ const app = {
         <div class="written-guidance">💡 ${p.guidance}</div>
         <textarea class="written-textarea" id="textarea-${p.id}"
                   placeholder="Write your response here…"
-                  oninput="app._updateWordCount('${p.id}', this)"></textarea>
+                  oninput="app._updateWordCount('${p.id}', this); app._autosaveDraft()"></textarea>
         <div class="word-count-row">Words: <span class="word-count-val" id="wc-${p.id}">0</span></div>`;
       container.appendChild(card);
     });
@@ -1062,12 +1062,36 @@ const app = {
     btn.textContent = '✅ Submit Written Responses';
     document.getElementById('written-submit-error').textContent = '';
     document.getElementById('written-success-panel').classList.add('hidden');
+    this._restoreDraft();
   },
 
   _updateWordCount(id, textarea) {
     const words = textarea.value.trim().split(/\s+/).filter(w => w.length > 0).length;
     const el = document.getElementById(`wc-${id}`);
     if (el) el.textContent = words;
+  },
+
+  _autosaveDraft() {
+    const draft = {};
+    for (const p of WRITTEN_PROMPTS) {
+      const ta = document.getElementById(`textarea-${p.id}`);
+      if (ta) draft[p.id] = ta.value;
+    }
+    localStorage.setItem('djt_written_draft_v1', JSON.stringify({ name: this.studentName, draft }));
+  },
+
+  _restoreDraft() {
+    try {
+      const saved = JSON.parse(localStorage.getItem('djt_written_draft_v1') || 'null');
+      if (!saved || saved.name !== this.studentName) return;
+      for (const p of WRITTEN_PROMPTS) {
+        const ta = document.getElementById(`textarea-${p.id}`);
+        if (ta && saved.draft[p.id]) {
+          ta.value = saved.draft[p.id];
+          this._updateWordCount(p.id, ta);
+        }
+      }
+    } catch(e) {}
   },
 
   submitWrittenResponses() {
@@ -1092,6 +1116,7 @@ const app = {
     const written = JSON.parse(localStorage.getItem(WRITTEN_KEY) || '[]');
     written.push({ name: this.studentName, timestamp: new Date().toISOString() });
     localStorage.setItem(WRITTEN_KEY, JSON.stringify(written));
+    localStorage.removeItem('djt_written_draft_v1');
 
     // Hide prompts and submit button; show success panel with Continue button
     document.getElementById('written-prompts-container').classList.add('hidden');

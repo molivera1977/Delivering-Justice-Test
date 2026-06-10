@@ -1060,7 +1060,7 @@ const app = {
         <textarea class="written-textarea" id="textarea-${p.id}"
                   placeholder="Write your response here…"
                   oninput="app._updateWordCount('${p.id}', this); app._autosaveDraft()"></textarea>
-        <div class="word-count-row">Words: <span class="word-count-val" id="wc-${p.id}">0</span></div>`;
+        <div class="word-count-row">Words: <span class="word-count-val" id="wc-${p.id}">0</span><span style="color:#aaa;font-size:0.8rem;"> / 10 minimum</span></div>`;
       container.appendChild(card);
     });
 
@@ -1077,7 +1077,7 @@ const app = {
   _updateWordCount(id, textarea) {
     const words = textarea.value.trim().split(/\s+/).filter(w => w.length > 0).length;
     const el = document.getElementById(`wc-${id}`);
-    if (el) el.textContent = words;
+    if (el) { el.textContent = words; el.style.color = words >= 10 ? '#27ae60' : 'var(--primary, #e74c3c)'; }
   },
 
   _autosaveDraft() {
@@ -1144,9 +1144,13 @@ const app = {
       responses[p.id.toLowerCase()] = ta ? ta.value.trim() : '';
     }
 
-    if (Object.values(responses).every(v => v.length === 0)) {
-      document.getElementById('written-submit-error').textContent =
-        '⚠️ Please write something in at least one response before submitting.';
+    const errors = [];
+    for (const p of WRITTEN_PROMPTS) {
+      const count = (responses[p.id.toLowerCase()] || '').split(/\s+/).filter(w => w.length > 0).length;
+      if (count < 10) errors.push(`${p.id} needs at least 10 words (you have ${count}).`);
+    }
+    if (errors.length) {
+      document.getElementById('written-submit-error').textContent = '⚠️ ' + errors.join('  ');
       return;
     }
 

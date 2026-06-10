@@ -367,6 +367,7 @@ const app = {
   readInterval:     null,
   writtenTimerSeconds: 0,
   writtenTimerInterval: null,
+  _autosaveDraftTimer: null,
   _lastFinishedScore: null,
 
   show(id) {
@@ -1086,6 +1087,19 @@ const app = {
       if (ta) draft[p.id] = ta.value;
     }
     localStorage.setItem('djt_written_draft_v1', JSON.stringify({ name: this.studentName, draft }));
+    clearTimeout(this._autosaveDraftTimer);
+    this._autosaveDraftTimer = setTimeout(() => this._saveDraftToServer(draft), 3000);
+  },
+
+  _saveDraftToServer(draft) {
+    fetch(SHEET_URL, {
+      method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'draft', game: 'djt_comp_written',
+        name: this.studentName, sessionId: sessionId('comp') + '-written',
+        w1: draft.w1 || '', w2: draft.w2 || '', w3: draft.w3 || ''
+      })
+    }).catch(() => {});
   },
 
   _restoreDraft() {

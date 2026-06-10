@@ -102,7 +102,10 @@ function submitScoreFinal() {
   }).catch(() => {});
 }
 
-function submitWrittenToSheet(w1, w2, w3) {
+function submitWrittenToSheet(w1, w2, w3, elapsedSeconds) {
+  const mins = Math.floor(elapsedSeconds / 60);
+  const secs = elapsedSeconds % 60;
+  const elapsedStr = `${mins}m ${secs}s`;
   fetch(SHEET_URL, {
     method: 'POST', mode: 'no-cors',
     headers: { 'Content-Type': 'application/json' },
@@ -112,6 +115,7 @@ function submitWrittenToSheet(w1, w2, w3) {
       sessionId: sessionId('comp') + '-written',
       name:      app.studentName || 'Unknown',
       w1, w2, w3,
+      elapsed:   elapsedStr,
       timestamp: new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })
     })
   }).catch(() => {});
@@ -361,6 +365,8 @@ const app = {
   timerOn:          false,
   instructInterval: null,
   readInterval:     null,
+  writtenTimerSeconds: 0,
+  writtenTimerInterval: null,
   _lastFinishedScore: null,
 
   show(id) {
@@ -1064,6 +1070,7 @@ const app = {
     document.getElementById('written-submit-error').textContent = '';
     document.getElementById('written-success-panel').classList.add('hidden');
     this._restoreDraft();
+    this._startWrittenTimer();
   },
 
   _updateWordCount(id, textarea) {
@@ -1095,6 +1102,27 @@ const app = {
     } catch(e) {}
   },
 
+  _startWrittenTimer() {
+    if (this.writtenTimerInterval) clearInterval(this.writtenTimerInterval);
+    this.writtenTimerSeconds = 0;
+    this._tickWrittenTimer();
+    this.writtenTimerInterval = setInterval(() => {
+      this.writtenTimerSeconds++;
+      this._tickWrittenTimer();
+    }, 1000);
+  },
+
+  _tickWrittenTimer() {
+    const m = String(Math.floor(this.writtenTimerSeconds / 60)).padStart(2, '0');
+    const s = String(this.writtenTimerSeconds % 60).padStart(2, '0');
+    const el = document.getElementById('written-timer-display');
+    if (el) el.textContent = `${m}:${s}`;
+  },
+
+  _stopWrittenTimer() {
+    if (this.writtenTimerInterval) { clearInterval(this.writtenTimerInterval); this.writtenTimerInterval = null; }
+  },
+
   submitWrittenResponses() {
     const responses = {};
     for (const p of WRITTEN_PROMPTS) {
@@ -1112,7 +1140,8 @@ const app = {
     const btn = document.getElementById('submit-written-btn');
     btn.disabled = true; btn.textContent = '⏳ Submitting…';
 
-    submitWrittenToSheet(responses.w1 || '', responses.w2 || '', responses.w3 || '');
+    this._stopWrittenTimer();
+    submitWrittenToSheet(responses.w1 || '', responses.w2 || '', responses.w3 || '', this.writtenTimerSeconds);
 
     const written = JSON.parse(localStorage.getItem(WRITTEN_KEY) || '[]');
     written.push({ name: this.studentName, timestamp: new Date().toISOString() });
@@ -1311,6 +1340,10 @@ const app = {
 /* ── VISIBILITY / UNLOAD ─────────────────────────────── */
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
+    if (app.writtenTimerInterval) {
+      app._stopWrittenTimer();
+      app._wasWrittenTimerRunning = true;
+    }
     if (!app.timerOn) return;
     tabSwitchCount++;
     app.stopTimerEngine();
@@ -1319,6 +1352,13 @@ document.addEventListener('visibilitychange', () => {
     if (app.readInterval)     clearInterval(app.readInterval);
     app._wasTimerRunning = true;
   } else {
+    if (app._wasWrittenTimerRunning) {
+      app._wasWrittenTimerRunning = false;
+      app.writtenTimerInterval = setInterval(() => {
+        app.writtenTimerSeconds++;
+        app._tickWrittenTimer();
+      }, 1000);
+    }
     if (!app._wasTimerRunning) return;
     app._wasTimerRunning = false;
     const wb = document.getElementById('tab-warning-banner');

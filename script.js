@@ -760,11 +760,12 @@ const app = {
     }));
     document.querySelectorAll('.answer-btn').forEach(b => { b.classList.add('locked-choice'); b.disabled = true; });
 
-    let remaining = READ_SECS;
+    this.readRemaining = READ_SECS;
     this.readInterval = setInterval(() => {
-      remaining--; count.textContent = remaining;
-      if (remaining <= 0) {
+      this.readRemaining--; count.textContent = this.readRemaining;
+      if (this.readRemaining <= 0) {
         clearInterval(this.readInterval); this.readInterval = null;
+        this.readRemaining = 0;
         bar.classList.add('hidden');
         document.querySelectorAll('.answer-btn').forEach(b => { b.classList.remove('locked-choice'); b.disabled = false; });
         document.getElementById('confirm-btn').classList.remove('hidden');
@@ -1309,14 +1310,17 @@ const app = {
 
 /* ── VISIBILITY / UNLOAD ─────────────────────────────── */
 document.addEventListener('visibilitychange', () => {
-  if (!app.timerOn) return;
   if (document.hidden) {
+    if (!app.timerOn) return;
     tabSwitchCount++;
     app.stopTimerEngine();
     app.saveProgress();
     if (app.instructInterval) clearInterval(app.instructInterval);
     if (app.readInterval)     clearInterval(app.readInterval);
+    app._wasTimerRunning = true;
   } else {
+    if (!app._wasTimerRunning) return;
+    app._wasTimerRunning = false;
     const wb = document.getElementById('tab-warning-banner');
     if (wb) wb.classList.remove('hidden');
     app.stopTimerEngine();

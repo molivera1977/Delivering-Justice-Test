@@ -1077,9 +1077,9 @@ const app = {
       const card = document.createElement('div');
       card.className = 'written-prompt-card';
       card.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <div class="written-prompt-label">${p.id}</div>
+        <div style="display:flex;align-items:center;gap:8px;">
           <button class="speak-btn" onclick="speakWrittenPrompt(this,'${p.id}')">🔊</button>
+          <div class="written-prompt-label">${p.id}</div>
         </div>
         <div class="written-prompt-type">${p.type}</div>
         <div class="written-prompt-text" id="prompt-text-${p.id}">${p.prompt}</div>

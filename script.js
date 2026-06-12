@@ -71,9 +71,10 @@ function submitScorePartial() {
       total,
       percent:  pct,
       status:   `In Progress (Q${app.currentIndex + 1}/${app.currentBank.length})`,
-      done:     false,
-      elapsed:  app.timerSeconds,
-      timestamp: new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })
+      done:           false,
+      elapsed:        app.timerSeconds,
+      wrongQuestions: (app.missedQuestions||[]).map(m=>`[${m.id}] ${m.q}`).join(' | '),
+      timestamp:      new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })
     })
   }).catch(() => {});
 }
@@ -95,9 +96,10 @@ function submitScoreFinal() {
       total,
       percent:  pct,
       status:   'Complete',
-      done:     true,
-      elapsed:  app.timerSeconds,
-      timestamp: new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })
+      done:           true,
+      elapsed:        app.timerSeconds,
+      wrongQuestions: (app.missedQuestions||[]).map(m=>`[${m.id}] ${m.q}`).join(' | '),
+      timestamp:      new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })
     })
   }).catch(() => {});
 }
@@ -382,6 +384,7 @@ const app = {
   currentIndex:     0,
   score:            0,
   maxScore:         0,
+  missedQuestions:  [],
   selectedIndices:  new Set(),
   questionLocked:   false,
   timerSeconds:     0,
@@ -901,8 +904,11 @@ const app = {
 
     if (isMulti) {
       this.score += [...this.selectedIndices].filter(i => q.answer.includes(i)).length;
+      const allCorrect = q.answer.every(i => this.selectedIndices.has(i)) && [...this.selectedIndices].every(i => q.answer.includes(i));
+      if (!allCorrect) this.missedQuestions.push({ id: q.id, q: q.q });
     } else {
       if ([...this.selectedIndices][0] === q.answer) this.score++;
+      else this.missedQuestions.push({ id: q.id, q: q.q });
     }
 
     document.querySelectorAll('.answer-btn').forEach((btn, i) => {

@@ -323,6 +323,30 @@ function stopActiveSpeech() {
   if (activeSpeakBtn) { activeSpeakBtn.textContent = '🔊'; activeSpeakBtn = null; }
 }
 
+function speakWrittenPrompt(btn, promptId) {
+  if (activeSpeakBtn === btn) { stopActiveSpeech(); return; }
+  stopActiveSpeech();
+  const p = document.getElementById('prompt-text-' + promptId);
+  if (!p) return;
+  if (!p.querySelector('.wrd')) p.innerHTML = wrapWords(p.innerHTML);
+  const spans = Array.from(p.querySelectorAll('.wrd'));
+  if (!spans.length) return;
+  activeSpeakBtn = btn; btn.textContent = '⏹';
+  const u = new SpeechSynthesisUtterance(spans.map(s => s.textContent).join(' '));
+  u.lang = 'en-US'; u.rate = 0.92; let hlIdx = 0;
+  u.onboundary = e => {
+    if (e.name !== 'word') return;
+    p.querySelectorAll('.wrd.hl').forEach(el => el.classList.remove('hl'));
+    if (spans[hlIdx]) spans[hlIdx].classList.add('hl');
+    hlIdx++;
+  };
+  u.onend = () => {
+    p.querySelectorAll('.wrd.hl').forEach(el => el.classList.remove('hl'));
+    if (activeSpeakBtn === btn) { btn.textContent = '🔊'; activeSpeakBtn = null; }
+  };
+  window.speechSynthesis.speak(u);
+}
+
 function speakDir(btn) {
   if (activeSpeakBtn === btn) { stopActiveSpeech(); return; }
   stopActiveSpeech();
@@ -1053,9 +1077,12 @@ const app = {
       const card = document.createElement('div');
       card.className = 'written-prompt-card';
       card.innerHTML = `
-        <div class="written-prompt-label">${p.id}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div class="written-prompt-label">${p.id}</div>
+          <button class="speak-btn" onclick="speakWrittenPrompt(this,'${p.id}')">🔊</button>
+        </div>
         <div class="written-prompt-type">${p.type}</div>
-        <div class="written-prompt-text">${p.prompt}</div>
+        <div class="written-prompt-text" id="prompt-text-${p.id}">${p.prompt}</div>
         <div class="written-guidance">💡 ${p.guidance}</div>
         <textarea class="written-textarea" id="textarea-${p.id}"
                   placeholder="Write your response here…"
